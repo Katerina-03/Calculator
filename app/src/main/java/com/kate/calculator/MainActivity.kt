@@ -20,7 +20,6 @@ import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -28,10 +27,11 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.abs
+import java.math.BigDecimal
+import java.math.MathContext
 
-private const val NO_OP = ' '
 private const val ERROR = "Error"
+private val OPERATORS = setOf("+", "−", "×", "÷")
 
 private val keys = listOf(
     listOf("C", "CE", "÷", "×"),
@@ -45,9 +45,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
-                CalculatorScreen()
-            }
+            MaterialTheme { CalculatorScreen() }
         }
     }
 }
@@ -56,31 +54,51 @@ class MainActivity : ComponentActivity() {
 fun CalculatorScreen() {
     var input by rememberSaveable { mutableStateOf("0") }
     var acc by rememberSaveable { mutableDoubleStateOf(0.0) }
-    var op by rememberSaveable { mutableStateOf(NO_OP) }
+    var op by rememberSaveable { mutableStateOf("") }
     var fresh by rememberSaveable { mutableStateOf(true) }
 
     fun clearAll() {
         input = "0"
         acc = 0.0
-        op = NO_OP
+        op = ""
         fresh = true
     }
 
-    fun showResult(value: Double) {
-        if (value.isNaN() || value.isInfinite()) {
+    fun compute(): Boolean {
+        val current = input.toDoubleOrNull() ?: 0.0
+        val result = if (op.isEmpty()) current else calculate(acc, op, current)
+        if (result.isNaN() || result.isInfinite()) {
             clearAll()
             input = ERROR
-        } else {
-            input = format(value)
-            fresh = true
+            return false
         }
+        acc = result
+        input = format(result)
+        fresh = true
+        return true
     }
 
     fun onKey(key: String) {
+        if (input == ERROR && key != "C") return
         when (key) {
             "C" -> clearAll()
+
             "CE" -> {
                 input = "0"
+                fresh = true
+            }
+
+            "=" -> if (op.isNotEmpty() && compute()) op = ""
+
+            in OPERATORS -> {
+                if (key == "−" && op.isNotEmpty() && fresh) {
+                    input = "-"
+                    fresh = false
+                    return
+                }
+                if (op.isNotEmpty() && !fresh && !compute()) return
+                acc = input.toDoubleOrNull() ?: 0.0
+                op = key
                 fresh = true
             }
 
@@ -89,27 +107,8 @@ fun CalculatorScreen() {
                     input = "0"
                     fresh = false
                 }
+                if (input == "-") input = "-0"
                 if ('.' !in input) input += "."
-            }
-
-            "+", "−", "×", "÷" -> {
-                val current = input.toDoubleOrNull() ?: 0.0
-                if (op != NO_OP && !fresh) {
-                    val result = calculate(acc, op, current)
-                    showResult(result)
-                    acc = if (result.isNaN() || result.isInfinite()) 0.0 else result
-                } else {
-                    acc = current
-                }
-                if (input != ERROR) op = key[0]
-                fresh = true
-            }
-
-            "=" -> {
-                if (op != NO_OP) {
-                    showResult(calculate(acc, op, input.toDoubleOrNull() ?: 0.0))
-                    op = NO_OP
-                }
             }
 
             else -> {
@@ -122,14 +121,14 @@ fun CalculatorScreen() {
         }
     }
 
-    Scaffold(
-        modifier = Modifier.semantics { testTagsAsResourceId = true }) { padding ->
+    Scaffold(modifier = Modifier.semantics { testTagsAsResourceId = true }) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             SelectionContainer(Modifier.weight(1.5f)) {
                 Text(
                     text = input,
@@ -146,7 +145,8 @@ fun CalculatorScreen() {
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     row.forEach { key ->
                         Button(
                             onClick = { onKey(key) },
@@ -155,11 +155,7 @@ fun CalculatorScreen() {
                                 .fillMaxSize()
                                 .testTag("key_$key"),
                         ) {
-                            Text(
-                                key,
-                                fontSize = 22.sp,
-                                modifier = Modifier.align(Alignment.CenterVertically)
-                            )
+                            Text(key, fontSize = 22.sp)
                         }
                     }
                 }
@@ -168,17 +164,13 @@ fun CalculatorScreen() {
     }
 }
 
-private fun calculate(a: Double, op: Char, b: Double): Double = when (op) {
-    '+' -> a + b
-    '−' -> a - b
-    '×' -> a * b
-    '÷' -> a / b
+private fun calculate(a: Double, op: String, b: Double): Double = when (op) {
+    "+" -> a + b
+    "−" -> a - b
+    "×" -> a * b
+    "÷" -> a / b
     else -> b
 }
 
 private fun format(value: Double): String =
-    if (abs(value) < 1e15 && value == value.toLong().toDouble()) {
-        value.toLong().toString()
-    } else {
-        value.toString()
-    }
+    BigDecimal(value).round(MathContext(12)).stripTrailingZeros().toPlainString()
