@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.calculator"
+    namespace = "com.kate.calculator"
     compileSdk {
         version = release(37)
     }
