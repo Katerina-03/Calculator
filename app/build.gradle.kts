@@ -10,7 +10,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.calculator"
+        applicationId = "com.kate.calculator"
         minSdk = 24
         targetSdk = 37
         versionCode = 1
